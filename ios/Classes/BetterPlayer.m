@@ -538,17 +538,19 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
     
     if (loadedTimeRanges.count > 0) {
         CMTime nearestTime = kCMTimeInvalid;
-        CMTime desiredDuration = desiredTime - CMTimeGetSeconds(_player.currentTime);
+        Float64 desiredSeconds = CMTimeGetSeconds(desiredTime);
         
         for (NSValue *value in loadedTimeRanges) {
             CMTimeRange timeRange = [value CMTimeRangeValue];
+            Float64 startTime = CMTimeGetSeconds(timeRange.start);
+            Float64 endTime = CMTimeGetSeconds(CMTimeRangeGetEnd(timeRange));
             
-            if (CMTIME_COMPARE_INLINE(timeRange.start, <=, desiredTime) && CMTIME_COMPARE_INLINE(timeRange.end, >=, desiredTime)) {
+            if (startTime <= desiredSeconds && endTime >= desiredSeconds) {
                 nearestTime = desiredTime;
                 break;
-            } else if (CMTIME_COMPARE_INLINE(timeRange.end, <, desiredTime) && CMTIME_COMPARE_INLINE(timeRange.end, >, nearestTime)) {
-                nearestTime = timeRange.end;
-            } else if (CMTIME_COMPARE_INLINE(timeRange.start, >, desiredTime) && (CMTIME_IS_INVALID(nearestTime) || CMTIME_COMPARE_INLINE(timeRange.start, <, nearestTime))) {
+            } else if (endTime < desiredSeconds && endTime > CMTimeGetSeconds(nearestTime)) {
+                nearestTime = CMTimeRangeGetEnd(timeRange);
+            } else if (startTime > desiredSeconds && (CMTIME_IS_INVALID(nearestTime) || startTime < CMTimeGetSeconds(nearestTime))) {
                 nearestTime = timeRange.start;
             }
         }
@@ -577,6 +579,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         }
     }];
 }
+
 
 - (void)setIsLooping:(bool)isLooping {
     _isLooping = isLooping;
