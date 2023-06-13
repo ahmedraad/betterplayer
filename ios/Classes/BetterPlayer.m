@@ -519,9 +519,52 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
 }
 
 - (void)seekTo:(int)location {
-    ///When player is playing, pause video, seek to new position and start again. This will prevent issues with seekbar jumps.
+    CMTime desiredTime = CMTimeMake(location, 1000);
+    CMTimeRange cachedTimeRange = [[_player.currentItem.loadedTimeRanges firstObject] CMTimeRangeValue];
+    
+    if (CMTIME_COMPARE_INLINE(desiredTime, >=, cachedTimeRange.start) && CMTIME_COMPARE_INLINE(desiredTime, <=, CMTimeRangeGetEnd(cachedTimeRange))) {
+        // Position is cached
+        NSLog(@"Seek position is cached");
+        [self performSeekTo:location];
+    } else {
+        // Position is not cached
+        NSLog(@"Seek position is not cached");
+        [self seekToNearestCachedPosition:desiredTime];
+    }
+}
+
+- (void)seekToNearestCachedPosition:(CMTime)desiredTime {
+    NSArray<NSValue *> *loadedTimeRanges = [_player.currentItem.loadedTimeRanges copy];
+    
+    if (loadedTimeRanges.count > 0) {
+        CMTime nearestTime = kCMTimeInvalid;
+        CMTime desiredDuration = desiredTime - CMTimeGetSeconds(_player.currentTime);
+        
+        for (NSValue *value in loadedTimeRanges) {
+            CMTimeRange timeRange = [value CMTimeRangeValue];
+            
+            if (CMTIME_COMPARE_INLINE(timeRange.start, <=, desiredTime) && CMTIME_COMPARE_INLINE(timeRange.end, >=, desiredTime)) {
+                nearestTime = desiredTime;
+                break;
+            } else if (CMTIME_COMPARE_INLINE(timeRange.end, <, desiredTime) && CMTIME_COMPARE_INLINE(timeRange.end, >, nearestTime)) {
+                nearestTime = timeRange.end;
+            } else if (CMTIME_COMPARE_INLINE(timeRange.start, >, desiredTime) && (CMTIME_IS_INVALID(nearestTime) || CMTIME_COMPARE_INLINE(timeRange.start, <, nearestTime))) {
+                nearestTime = timeRange.start;
+            }
+        }
+        
+        if (!CMTIME_IS_INVALID(nearestTime)) {
+            int nearestLocation = CMTimeGetSeconds(nearestTime) * 1000;
+            NSLog(@"Seeking to nearest cached position: %d", nearestLocation);
+            [self performSeekTo:nearestLocation];
+        }
+    }
+}
+
+- (void)performSeekTo:(int)location {
+    // Perform the actual seek operation
     bool wasPlaying = _isPlaying;
-    if (wasPlaying){
+    if (wasPlaying) {
         [_player pause];
     }
 
@@ -529,7 +572,7 @@ static inline CGFloat radiansToDegrees(CGFloat radians) {
         toleranceBefore:kCMTimeZero
          toleranceAfter:kCMTimeZero
       completionHandler:^(BOOL finished){
-        if (wasPlaying){
+        if (wasPlaying) {
             _player.rate = _playerRate;
         }
     }];
